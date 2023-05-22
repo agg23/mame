@@ -155,11 +155,21 @@ The MCUs used were not imported from Sharp, but cloned by USSR, renamed to
 //#include "hh_sm510_test.lh" // common test-layout - use external artwork
 #include "hh_sm500_test.lh" // "
 
+#include "debug/debugcon.h"
+#include "debugger.h"
 
 // machine start/reset
 
 void hh_sm510_state::machine_start()
 {
+	if (machine().debug_flags & DEBUG_FLAG_ENABLED)
+	{
+		using namespace std::placeholders;
+		machine().debugger().console().register_command("inputs", CMDFLAG_NONE, 2, 2, std::bind(&hh_sm510_state::prime_inputs_command, this, _1));
+	}
+
+	memset(m_debug_inputs, 0, sizeof(m_debug_inputs));
+	
 	// resolve handlers
 	m_out_x.resolve();
 
@@ -201,7 +211,36 @@ void hh_sm510_state::machine_reset()
 {
 }
 
+void hh_sm510_state::prime_inputs_command(const std::vector<std::string_view> &params)
+{
+	uint64_t temp_port_index;
+	uint64_t temp_port_value;
 
+	if (!machine().debugger().console().validate_number_parameter(params[0], temp_port_index))
+	{
+		machine().debugger().console().printf("Error: First parameter (port index) must be a number between 0 and 2.\n");
+		return;
+	}
+	if (!machine().debugger().console().validate_number_parameter(params[1], temp_port_value))
+	{
+		machine().debugger().console().printf("Error: Second parameter (port value) must be a hexadecimal number.\n");
+		return;
+	}
+
+	if (temp_port_index > 2)
+	{
+		machine().debugger().console().printf("Error: Port index must be between 0 and 2.\n");
+		return;
+	}
+
+	m_debug_inputs[temp_port_index] = uint8_t(temp_port_value);
+	printf("Output %x into %x. Bit(2): %x\n", uint8_t(temp_port_value), uint8_t(temp_port_index), BIT(uint8_t(temp_port_value), 2));
+}
+
+int hh_sm510_state::debug_inputs_r(int port, int line)
+{
+	return BIT(m_debug_inputs[port], line);
+}
 
 /*******************************************************************************
 
@@ -276,7 +315,7 @@ u8 hh_sm510_state::read_inputs(int columns, int fixed)
 
 	// read selected input rows
 	for (int i = 0; i < columns; i++)
-		if (BIT(m_inp_mux, i))
+		if (m_inp_mux >> i & 1)
 			ret |= m_inputs[i]->read();
 
 	if (fixed >= 0)
@@ -2362,26 +2401,102 @@ public:
 	{ }
 
 	void gnw_dkong2(machine_config &config);
+
+	// int debug_inputs_00_r() { return debug_inputs_r(0, 0); }
+	// int debug_inputs_01_r() { return debug_inputs_r(0, 1); }
+	// int debug_inputs_02_r() { return debug_inputs_r(0, 2); }
+	// int debug_inputs_03_r() { return debug_inputs_r(0, 3); }
+	// int debug_inputs_10_r() { return debug_inputs_r(1, 0); }
+	// int debug_inputs_11_r() { return debug_inputs_r(1, 1); }
+	// int debug_inputs_12_r() { return debug_inputs_r(1, 2); }
+	// int debug_inputs_13_r() { return debug_inputs_r(1, 3); }
+	// int debug_inputs_20_r() { return debug_inputs_r(2, 0); }
+	// int debug_inputs_21_r() { return debug_inputs_r(2, 1); }
+	// int debug_inputs_22_r() { return debug_inputs_r(2, 2); }
+	// int debug_inputs_23_r() { return debug_inputs_r(2, 3); }
+
+	// int debug_inputs_r(int port, int line);
+protected:
+    // virtual void machine_start() override;
+		// void prime_inputs_command(const std::vector<std::string_view> &params);
+
+		// uint8_t m_debug_inputs[3];
 };
+
+// void gnw_dkong2_state::machine_start()
+// {
+// 	hh_sm510_state::machine_start();
+
+// 	if (machine().debug_flags & DEBUG_FLAG_ENABLED)
+// 	{
+// 		using namespace std::placeholders;
+// 		machine().debugger().console().register_command("inputs", CMDFLAG_NONE, 2, 2, std::bind(&gnw_dkong2_state::prime_inputs_command, this, _1));
+// 	}
+
+// 	memset(m_debug_inputs, 0, sizeof(m_debug_inputs));
+// }
+
+// void gnw_dkong2_state::prime_inputs_command(const std::vector<std::string_view> &params)
+// {
+// 	uint64_t temp_port_index;
+// 	uint64_t temp_port_value;
+
+// 	if (!machine().debugger().console().validate_number_parameter(params[0], temp_port_index))
+// 	{
+// 		machine().debugger().console().printf("Error: First parameter (port index) must be a number between 0 and 2.\n");
+// 		return;
+// 	}
+// 	if (!machine().debugger().console().validate_number_parameter(params[1], temp_port_value))
+// 	{
+// 		machine().debugger().console().printf("Error: Second parameter (port value) must be a hexadecimal number.\n");
+// 		return;
+// 	}
+
+// 	if (temp_port_index > 2)
+// 	{
+// 		machine().debugger().console().printf("Error: Port index must be between 0 and 2.\n");
+// 		return;
+// 	}
+
+// 	m_debug_inputs[temp_port_index] = uint8_t(temp_port_value);
+// 	printf("Output %x into %x. Bit(2): %x\n", uint8_t(temp_port_value), uint8_t(temp_port_index), BIT(uint8_t(temp_port_value), 2));
+// }
+
+// int gnw_dkong2_state::debug_inputs_r(int port, int line)
+// {
+// 	return BIT(m_debug_inputs[port], line);
+// }
 
 // inputs
 
 static INPUT_PORTS_START( gnw_dkong2 )
 	PORT_START("IN.0") // S1
-	PORT_BIT( 0x07, IP_ACTIVE_HIGH, IPT_UNUSED )
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_CHANGED_CB(input_changed) // Jump
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_00_r)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_01_r)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_02_r)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_03_r)
+	// PORT_BIT( 0x07, IP_ACTIVE_HIGH, IPT_UNUSED )
+	// PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_CHANGED_CB(input_changed) // Jump
 
 	PORT_START("IN.1") // S2
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_CHANGED_CB(input_changed)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_CHANGED_CB(input_changed)
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_CHANGED_CB(input_changed)
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_CHANGED_CB(input_changed)
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_10_r)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_11_r)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_12_r)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_13_r)
+	// PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_CHANGED_CB(input_changed)
+	// PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_CHANGED_CB(input_changed)
+	// PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_CHANGED_CB(input_changed)
+	// PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_CHANGED_CB(input_changed)
 
 	PORT_START("IN.2") // S3
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SELECT ) PORT_CHANGED_CB(input_changed) PORT_NAME("Time")
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_START2 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Game B")
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_START1 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Game A")
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_SERVICE2 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Alarm")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_20_r)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_21_r)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_22_r)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_23_r)
+	// PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SELECT ) PORT_CHANGED_CB(input_changed) PORT_NAME("Time")
+	// PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_START2 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Game B")
+	// PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_START1 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Game A")
+	// PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_SERVICE2 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Alarm")
 
 	PORT_START("ACL")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SERVICE1 ) PORT_CHANGED_CB(acl_button) PORT_NAME("ACL")
@@ -3755,16 +3870,24 @@ public:
 
 static INPUT_PORTS_START( gnw_mariocm )
 	PORT_START("IN.0") // S1
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_CHANGED_CB(input_changed) // Open
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_CHANGED_CB(input_changed) PORT_16WAY
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_CHANGED_CB(input_changed) PORT_16WAY
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED )
+	// PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_CHANGED_CB(input_changed) // Open
+	// PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_CHANGED_CB(input_changed) PORT_16WAY
+	// PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_CHANGED_CB(input_changed) PORT_16WAY
+	// PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_UNUSED )
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_00_r)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_01_r)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_02_r)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_03_r)
 
 	PORT_START("IN.1") // S2
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SELECT ) PORT_CHANGED_CB(input_changed) PORT_NAME("Time")
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_START2 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Game B")
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_START1 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Game A")
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_SERVICE2 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Alarm")
+	// PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SELECT ) PORT_CHANGED_CB(input_changed) PORT_NAME("Time")
+	// PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_START2 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Game B")
+	// PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_START1 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Game A")
+	// PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_SERVICE2 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Alarm")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_10_r)
+	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_11_r)
+	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_12_r)
+	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_MEMBER(hh_sm510_state, debug_inputs_13_r)
 
 	PORT_START("ACL")
 	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SERVICE1 ) PORT_CHANGED_CB(acl_button) PORT_NAME("ACL")
@@ -5538,70 +5661,6 @@ ROM_START( knfl )
 
 	ROM_REGION( 571173, "screen", 0)
 	ROM_LOAD( "knfl.svg", 0, 571173, CRC(406c5bed) SHA1(1f3a704f091b78c89c06108ba11310f4072cc178) )
-ROM_END
-
-
-
-
-
-/***************************************************************************
-
-  Konami Teenage Mutant Ninja Turtles 3: Shredder's Last Stand
-  * PCB label: BH018
-  * Sharp SM511 under epoxy (die label KMS73B, 794)
-  * lcd screen with custom segments, 1-bit sound
-
-***************************************************************************/
-
-class ktmnt3_state : public hh_sm510_state
-{
-public:
-	ktmnt3_state(const machine_config &mconfig, device_type type, const char *tag) :
-		hh_sm510_state(mconfig, type, tag)
-	{ }
-
-	void ktmnt3(machine_config &config);
-};
-
-// config
-
-static INPUT_PORTS_START( ktmnt3 )
-	PORT_START("IN.0") // S1
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_LEFT ) PORT_CHANGED_CB(input_changed)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_UP ) PORT_CHANGED_CB(input_changed)
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_SELECT ) PORT_CHANGED_CB(input_changed) PORT_NAME("Pause")
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_START ) PORT_CHANGED_CB(input_changed) PORT_NAME("Power On/Start")
-
-	PORT_START("IN.1") // S2
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT ) PORT_CHANGED_CB(input_changed)
-	PORT_BIT( 0x02, IP_ACTIVE_HIGH, IPT_JOYSTICK_DOWN ) PORT_CHANGED_CB(input_changed)
-	PORT_BIT( 0x04, IP_ACTIVE_HIGH, IPT_POWER_OFF ) PORT_CHANGED_CB(input_changed)
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_VOLUME_DOWN ) PORT_CHANGED_CB(input_changed) PORT_NAME("Sound")
-
-	PORT_START("IN.2") // S3
-	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_CHANGED_CB(input_changed) PORT_NAME("Attack")
-	PORT_BIT( 0x07, IP_ACTIVE_HIGH, IPT_UNUSED )
-
-	PORT_START("ACL")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_SERVICE1 ) PORT_CHANGED_CB(acl_button) PORT_NAME("All Clear")
-INPUT_PORTS_END
-
-void ktmnt3_state::ktmnt3(machine_config &config)
-{
-	sm511_common(config, 1593, 1080);
-}
-
-// roms
-
-ROM_START( ktmnt3 )
-	ROM_REGION( 0x1000, "maincpu", 0 )
-	ROM_LOAD( "794.program", 0x0000, 0x1000, CRC(fcbd6f79) SHA1(45badb94fb3e32350efb7e46e2e271c18135e2aa) )
-
-	ROM_REGION( 0x100, "maincpu:melody", 0 )
-	ROM_LOAD( "794.melody", 0x000, 0x100, CRC(9731c180) SHA1(443c4b9c2564e0901a0777d90ab8c138b24788ea) )
-
-	ROM_REGION( 563452, "screen", 0)
-	ROM_LOAD( "ktmnt3.svg", 0, 563452, CRC(3296c472) SHA1(2c6de52b4b840bb9d681bee04ebf4cdced66612f) )
 ROM_END
 
 
@@ -11068,7 +11127,6 @@ SYST( 1989, kloneran,     0,           0,      kloneran,     kloneran,     klone
 SYST( 1989, knascar,      0,           0,      knascar,      knascar,      knascar_state,      empty_init, "Konami", "Bill Elliott's NASCAR Racing (handheld)", MACHINE_SUPPORTS_SAVE | MACHINE_REQUIRES_ARTWORK )
 SYST( 1989, kblades,      0,           0,      kblades,      kblades,      kblades_state,      empty_init, "Konami", "Blades of Steel (handheld)", MACHINE_SUPPORTS_SAVE | MACHINE_REQUIRES_ARTWORK )
 SYST( 1989, knfl,         0,           0,      knfl,         knfl,         knfl_state,         empty_init, "Konami", "NFL Football (Konami, handheld)", MACHINE_SUPPORTS_SAVE | MACHINE_REQUIRES_ARTWORK )
-SYST( 1991, ktmnt3,       0,           0,      ktmnt3,       ktmnt3,       ktmnt3_state,       empty_init, "Konami", "Teenage Mutant Ninja Turtles 3: Shredder's Last Stand (handheld)", MACHINE_SUPPORTS_SAVE | MACHINE_REQUIRES_ARTWORK )
 SYST( 1991, kbucky,       0,           0,      kbucky,       kbucky,       kbucky_state,       empty_init, "Konami", "Bucky O'Hare (handheld)", MACHINE_SUPPORTS_SAVE | MACHINE_REQUIRES_ARTWORK )
 SYST( 1991, kgarfld,      0,           0,      kgarfld,      kgarfld,      kgarfld_state,      empty_init, "Konami", "Garfield (Konami)", MACHINE_SUPPORTS_SAVE | MACHINE_REQUIRES_ARTWORK )
 

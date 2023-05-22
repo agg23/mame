@@ -109,7 +109,7 @@ void sm510_base_device::device_start()
 	state_add(STATE_GENFLAGS, "GENFLAGS", m_c).formatstr("%1s").noshow();
 
 	m_state_count = 0;
-	state_add(++m_state_count, "PC", m_pc).formatstr("%04X"); // 1
+	state_add(++m_state_count, "PC", m_pc).formatstr("%03X"); // 1
 	state_add(++m_state_count, "ACC", m_acc).formatstr("%01X"); // 2
 	state_add(++m_state_count, "X", m_x).formatstr("%01X"); // 3
 	state_add(++m_state_count, "BL", m_bl).formatstr("%01X"); // 4
@@ -117,6 +117,10 @@ void sm510_base_device::device_start()
 	state_add(++m_state_count, "C", m_c).formatstr("%01X"); // 6
 	state_add(++m_state_count, "W", m_w).formatstr("%02X"); // 7
 
+	state_add(++m_state_count, "gamma", m_gamma).formatstr("%1s");
+	state_add(++m_state_count, "main_div", m_div).formatstr("%04X");
+
+	// m_icount is the number of instruction cycles to run
 	set_icountptr(m_icount);
 
 	// init peripherals

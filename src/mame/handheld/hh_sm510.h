@@ -35,10 +35,29 @@ public:
 		m_out_x(*this, "%u.%u.%u", 0U, 0U, 0U)
 	{ }
 
+	int debug_inputs_00_r() { return debug_inputs_r(0, 0); }
+	int debug_inputs_01_r() { return debug_inputs_r(0, 1); }
+	int debug_inputs_02_r() { return debug_inputs_r(0, 2); }
+	int debug_inputs_03_r() { return debug_inputs_r(0, 3); }
+	int debug_inputs_10_r() { return debug_inputs_r(1, 0); }
+	int debug_inputs_11_r() { return debug_inputs_r(1, 1); }
+	int debug_inputs_12_r() { return debug_inputs_r(1, 2); }
+	int debug_inputs_13_r() { return debug_inputs_r(1, 3); }
+	int debug_inputs_20_r() { return debug_inputs_r(2, 0); }
+	int debug_inputs_21_r() { return debug_inputs_r(2, 1); }
+	int debug_inputs_22_r() { return debug_inputs_r(2, 2); }
+	int debug_inputs_23_r() { return debug_inputs_r(2, 3); }
+
+	int debug_inputs_r(int port, int line);
+
 	virtual DECLARE_INPUT_CHANGED_MEMBER(input_changed);
 	virtual DECLARE_INPUT_CHANGED_MEMBER(acl_button);
 
 protected:
+	void prime_inputs_command(const std::vector<std::string_view> &params);
+
+	uint8_t m_debug_inputs[3];
+
 	// devices
 	required_device<sm510_base_device> m_maincpu;
 	optional_device<speaker_sound_device> m_speaker;
