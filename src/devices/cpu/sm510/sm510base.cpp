@@ -120,6 +120,9 @@ void sm510_base_device::device_start()
 	state_add(++m_state_count, "gamma", m_gamma).formatstr("%1s");
 	state_add(++m_state_count, "main_div", m_div).formatstr("%04X");
 
+	state_add(++m_state_count, "ram", m_debug_ram).formatstr("%01X");
+	state_add(++m_state_count, "k", m_debug_k).formatstr("%01X");
+
 	// m_icount is the number of instruction cycles to run
 	set_icountptr(m_icount);
 
@@ -315,5 +318,8 @@ void sm510_base_device::execute_run()
 		}
 		else
 			execute_one();
+
+		m_debug_ram = ram_r();
+		m_debug_k = m_read_k();
 	}
 }

@@ -143,6 +143,9 @@ protected:
 	bool m_halt;
 	int m_clk_div;
 
+	u8 m_debug_ram;
+	u8 m_debug_k;
+
 	// lcd driver
 	optional_shared_ptr<u8> m_lcd_ram_a, m_lcd_ram_b, m_lcd_ram_c;
 	devcb_write16 m_write_segs;
